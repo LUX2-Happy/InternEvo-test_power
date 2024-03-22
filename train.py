@@ -44,7 +44,6 @@ from internlm.utils.simple_memory_profiler import SimpleMemoryProfiler
 from internlm.utils.writer import Writer
 
 from zeus.monitor import ZeusMonitor
-from zeus.monitor import ZeusMonitor
 from zeus.optimizer import GlobalPowerLimitOptimizer
 
 # global llm logger
@@ -204,8 +203,7 @@ def main(args):
     with initialize_llm_profile(profiling=args.profiling, start_time=current_time) as prof:
         # start iterating the train data and begin training
         for batch_count in range(train_state.batch_count, total_steps):
-            plo.on_step_begin()
-
+            current_power_limit = plo.on_step_begin()
             empty_cache_and_diag(batch_count, interval=gpc.config.data.empty_cache_and_diag_interval)
             start_time = time.time()
             timer("one-batch").start()
@@ -264,7 +262,6 @@ def main(args):
                         address=gpc.config.monitor.alert.feishu_alert_address,
                         message=f"Warning: skip parameter update at step {batch_count}.",
                     )
-
             # calculate and record the training metrics, eg. loss, accuracy and so on.
             record_current_batch_training_metrics(
                 get_tflops_func=get_tflops_func,
@@ -283,6 +280,7 @@ def main(args):
                 grad_norm=grad_norm_groups,
                 metric=metric,
                 update_panel=uniscale_logger is not None,
+                optimal_power_limit=current_power_limit,
             )
 
             timer("one-batch").stop()
@@ -314,6 +312,10 @@ def main(args):
     measurement = monitor.end_window("heavy computation")
     print(f"Energy: {measurement.total_energy} J")
     print(f"Time  : {measurement.time} s")
+    with open("./record.txt",'a+') as r_f:
+        r_f.write(f"{current_time}\n")
+        r_f.write(f"Energy: {measurement.total_energy} J\n")
+        r_f.write(f"Time  : {measurement.time} s\n\n")
     ckpt_manager.wait_async_upload_finish()
     plo.on_epoch_end()
 
